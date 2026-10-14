@@ -1,0 +1,8 @@
+import {NextRequest,NextResponse} from 'next/server';
+import {db} from '@/lib/db';import {createToken,cookieOptions} from '@/lib/auth';import bcrypt from 'bcryptjs';
+export async function POST(req:NextRequest){try{const {mode,name,email,password}=await req.json();if(typeof email!=='string'||typeof password!=='string'||!/^\S+@\S+\.\S+$/.test(email)||password.length<8)return NextResponse.json({error:'Valid email and password of 8+ characters required'},{status:400});const normalized=email.trim().toLowerCase();let user;
+if(mode==='register'){if(typeof name!=='string'||name.trim().length<2)return NextResponse.json({error:'Name required'},{status:400});if(await db.user.findUnique({where:{email:normalized}}))return NextResponse.json({error:'Email already registered'},{status:409});const count=await db.user.count();user=await db.user.create({data:{name:name.trim(),email:normalized,password:await bcrypt.hash(password,12),role:count===0?'ADMIN':'MEMBER'}})}
+else if(mode==='login'){user=await db.user.findUnique({where:{email:normalized}});if(!user||!await bcrypt.compare(password,user.password))return NextResponse.json({error:'Invalid credentials'},{status:401})}else return NextResponse.json({error:'Invalid action'},{status:400});
+const res=NextResponse.json({ok:true});res.cookies.set('teamflow_session',await createToken(user.id),cookieOptions);return res;
+}catch(e){console.error(e);return NextResponse.json({error:'Authentication service error. Check database setup.'},{status:500})}}
+export async function DELETE(){const res=NextResponse.json({ok:true});res.cookies.set('teamflow_session','',{...cookieOptions,maxAge:0});return res}
